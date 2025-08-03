@@ -20,7 +20,9 @@ uint8_t NuvotonICP::enter(void)
   write24(0x0b, 0);
   uint8_t company_id = read9(true);
   if (company_id == NUVOTON)
-    update_device_id();
+    read_device_id();
+  else
+    m_id = (uint16_t)-1;
 
   return company_id;
 }
@@ -48,16 +50,16 @@ void NuvotonICP::exit(void)
 bool NuvotonICP::locked()
 {
   write24(0, 0x30000L);
-  return (read9(true) & 2) ? false : true;
+  uint8_t config0 = read9(true);
+  return ((config0 != 0) && !(config0 & 2)) ? true : false;
 }
 
-uint16_t NuvotonICP::update_device_id()
+void NuvotonICP::read_device_id()
 {
   write24(0x0c, 0);
   uint8_t lo = read9();
   uint8_t hi = read9(true);
   m_id = makeWord(hi, lo);
-  return m_id;
 }
 
 void NuvotonICP::write24(uint32_t data)

@@ -40,7 +40,7 @@ class NuvotonICP {
     static constexpr bool is_empty_buffer(uint8_t result)
     { return !!(result & COMPARE_EMPTY_BUFFER); }
 
-    uint16_t update_device_id();
+    void read_device_id();
     uint16_t device_id() const { return m_id; }
     uint16_t pgsize() const { return id2pgsize(device_id()); }
     uint32_t size() const { return id2size(device_id()); }

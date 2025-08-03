@@ -46,7 +46,7 @@ void setup()
     Serial.println(F("Device locked"));
     if (may_unlock) {
       icp.mass_erase();
-      icp.update_device_id();
+      icp.read_device_id();
       Serial.println(F("Device erased"));
     } else
       goto exit;
@@ -55,8 +55,11 @@ void setup()
     goto exit;
   }
 
+  uint16_t device_id = icp.device_id();
   Serial.print(F("Device 0x"));
-  Serial.println(icp.device_id(), HEX);
+  Serial.println(device_id, HEX);
+  if (device_id == 0 || device_id == 0xffff)
+    goto exit;
 
   // CONFIG
   uint8_t config[5] = {
@@ -96,12 +99,12 @@ void setup()
       // erase
       if (!icp.is_empty_flash(result)) {
         icp.flash_erase(ldstart + offset);
-        Serial.write('.');
+        Serial.write('x');
       }
       // write
       if (!icp.is_empty_buffer(result)) {
         icp.flash_write(ldstart + offset, data, pgsize);
-        Serial.write('*');
+        Serial.write('.');
       }
       // verify
       if (!icp.is_equal(icp.flash_compare(ldstart + offset, data, pgsize))) {

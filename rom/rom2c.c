@@ -42,4 +42,5 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-// $ tcc -run rom2c.c bootloader-N76E003.bin >rom.h
+// $ tcc -run rom2c.c ISP_UART0.bin >rom.h
+// https://github.com/OpenNuvoton/N76E003_BSP/tree/master/SampleCode/ISP/ISP_UART0
