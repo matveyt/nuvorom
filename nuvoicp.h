@@ -1,10 +1,11 @@
-#if !defined(NUVOICP_H)
-#define NUVOICP_H
+#pragma once
 
+// Nuvoton In-Circuit Programming client
 class NuvotonICP {
   public:
     static constexpr uint8_t NUVOTON = 0xda;    // company ID
     static constexpr uint16_t N76E616 = 0x2f50; // device ID
+    static constexpr uint16_t NONE = -1;
     static constexpr uint8_t COMPARE_EQUAL = 1, // compare() flags
       COMPARE_EMPTY_FLASH = 2, COMPARE_EMPTY_BUFFER = 4;
   protected:
@@ -18,18 +19,19 @@ class NuvotonICP {
 
   public:
     NuvotonICP(uint8_t dataPin, uint8_t clockPin, uint8_t resetPin)
-      : m_dataPin(dataPin), m_clockPin(clockPin), m_resetPin(resetPin), m_id(-1) {}
+      : m_dataPin(dataPin), m_clockPin(clockPin), m_resetPin(resetPin), m_id(NONE) {}
 
-    uint8_t enter();
+    uint8_t enter();  // on success returns company ID
     void exit();
     bool locked();
 
     static constexpr uint8_t config0(bool cbs) { return cbs ? 0xff : 0x7f; }
-    static constexpr uint8_t config1(uint16_t ldsize) { return (0xff - ldsize / 1024); }
+    static constexpr uint8_t config1(uint16_t ldsize)
+    { return (0xff - (ldsize + 1023) / 1024); }
     static constexpr bool cbs(uint8_t config0) { return !!(config0 & 0x80); }
-    static constexpr int16_t ldsize(uint8_t config1)
+    static constexpr uint16_t ldsize(uint8_t config1)
     { return ((7 - (config1 & 7)) * 1024); }
-    static constexpr uint16_t id2pgsize(uint16_t id)
+    static constexpr uint16_t id2psize(uint16_t id)
     { return (id != N76E616) ? 128 : 256; }
     static constexpr uint32_t id2size(uint16_t id)
     { return (((uint8_t)id >> 4) <= 4) ? (4096L << ((uint8_t)id >> 4)) : (18 * 1024); }
@@ -40,9 +42,8 @@ class NuvotonICP {
     static constexpr bool is_empty_buffer(uint8_t result)
     { return !!(result & COMPARE_EMPTY_BUFFER); }
 
-    void read_device_id();
     uint16_t device_id() const { return m_id; }
-    uint16_t pgsize() const { return id2pgsize(device_id()); }
+    uint16_t psize() const { return id2psize(device_id()); }
     uint32_t size() const { return id2size(device_id()); }
 
     // CONFIG
@@ -89,5 +90,3 @@ class NuvotonICP {
     uint8_t m_dataPin, m_clockPin, m_resetPin;
     uint16_t m_id;
 };
-
-#endif // NUVOICP_H

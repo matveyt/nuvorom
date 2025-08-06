@@ -1,6 +1,6 @@
 #include "nuvoicp.h"
 
-uint8_t NuvotonICP::enter(void)
+uint8_t NuvotonICP::enter()
 {
   // pin setup
   pin_init(m_resetPin);
@@ -8,10 +8,11 @@ uint8_t NuvotonICP::enter(void)
   pin_init(m_clockPin);
 
   // toggle reset
-  for (int8_t i = 23; i >= 0; --i) {
+  for (int i = 23; i >= 0; --i) {
     digitalWrite(m_resetPin, bitRead(MAGIC_RESET, i));
     delay(DELAY_RESET1 / 1000);
   }
+
   // magic enter sequence
   write24(MAGIC_ENTER);
   delay(DELAY_RESET2 / 1000);
@@ -19,17 +20,21 @@ uint8_t NuvotonICP::enter(void)
   // read company id
   write24(0x0b, 0);
   uint8_t company_id = read9(true);
-  if (company_id == NUVOTON)
-    read_device_id();
-  else
-    m_id = (uint16_t)-1;
+  if (company_id == NUVOTON) {
+    // read device id
+    write24(0x0c, 0);
+    uint8_t lo = read9();
+    uint8_t hi = read9(true);
+    m_id = makeWord(hi, lo);
+  } else
+    m_id = NONE;
 
   return company_id;
 }
 
-void NuvotonICP::exit(void)
+void NuvotonICP::exit()
 {
-  if (m_id != (uint16_t)-1) {
+  if (m_id != NONE) {
     // toggle reset
     digitalWrite(m_resetPin, HIGH);
     delay(DELAY_RESET1 / 1000);
@@ -51,15 +56,7 @@ bool NuvotonICP::locked()
 {
   write24(0, 0x30000L);
   uint8_t config0 = read9(true);
-  return ((config0 != 0) && !(config0 & 2)) ? true : false;
-}
-
-void NuvotonICP::read_device_id()
-{
-  write24(0x0c, 0);
-  uint8_t lo = read9();
-  uint8_t hi = read9(true);
-  m_id = makeWord(hi, lo);
+  return (!bitRead(config0, 1) && config0) ? true : false;
 }
 
 void NuvotonICP::write24(uint32_t data)
