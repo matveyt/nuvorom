@@ -27,14 +27,14 @@ uint8_t NuvotonICP::enter()
     uint8_t hi = read9(true);
     m_id = makeWord(hi, lo);
   } else
-    m_id = NONE;
+    m_id = UINT16_MAX;
 
   return company_id;
 }
 
 void NuvotonICP::exit()
 {
-  if (m_id != NONE) {
+  if (m_id != UINT16_MAX) {
     // toggle reset
     digitalWrite(m_resetPin, HIGH);
     delay(DELAY_RESET1 / 1000);
@@ -143,20 +143,20 @@ void NuvotonICP::write(uint32_t address, uint8_t buffer[], size_t bufsize)
 // verify flash
 uint8_t NuvotonICP::compare(uint32_t address, uint8_t buffer[], size_t bufsize)
 {
-  uint8_t result = COMPARE_EQUAL | COMPARE_EMPTY_FLASH | COMPARE_EMPTY_BUFFER;
+  uint8_t result = 0;
   if (bufsize <= 0)
     return result;
 
   write24(0, address);
   for (size_t i = 0; i < bufsize; ++i) {
+    uint8_t bffr = (buffer != 0) ? buffer[i] : UINT8_MAX;
     uint8_t flsh = read9((i != bufsize - 1) ? false : true);
-    uint8_t bffr = (buffer != 0) ? buffer[i] : 0xff;
-    if (flsh != bffr)
-      result &= ~COMPARE_EQUAL;         // flash differs from supplied buffer
-    if (flsh != 0xff)
-      result &= ~COMPARE_EMPTY_FLASH;   // flash has some data (must be erased first)
-    if (bffr != 0xff)
-      result &= ~COMPARE_EMPTY_BUFFER;  // buffer has some data (must write to flash)
+    if (bffr != flsh)
+      result |= COMPARE_NOT_EQUAL;  // buffer not equal to flash (do something)
+    if ((bffr | flsh) != flsh)
+      result |= COMPARE_GREATER;    // buffer has more ones (must erase)
+    if (bffr != UINT8_MAX)
+      result |= COMPARE_NON_EMPTY;  // buffer has data (must write)
   }
 
   return result;

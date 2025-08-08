@@ -36,7 +36,7 @@ void setup()
   digitalWrite(LED, HIGH);
 
   Serial.begin(9600);
-  LOG("Nuvoton Device ID");
+  LOG("Nuvoton Device");
   if (enter_icp()) {
     LOG_N(icp.device_id());     // Device ID
     LOG_L();
@@ -48,9 +48,8 @@ void setup()
       static const uint8_t config[5] = {
         icp.config0(false),
         icp.config1(sizeof(ldrom)),
-        0xff, 0xff, 0xff,
+        UINT8_MAX, UINT8_MAX, UINT8_MAX,
       };
-
       LOG("CONFIG");            // CONFIG update
       if (update_config(config)) {
         LOG_L("OK");
@@ -71,7 +70,7 @@ bool enter_icp()
 {
   uint8_t company_id = icp.enter();
 
-  if (company_id == 0xff && icp.locked()) {
+  if (company_id == UINT8_MAX && icp.locked()) {
     LOG("locked");
     if (!may_unlock)
       return false;
@@ -89,32 +88,31 @@ bool enter_icp()
 bool update_config(const uint8_t config[5])
 {
   uint8_t result = icp.config_compare(config);
+  if (icp.equal(result))
+    return true;  // nothing to do
 
-  if (!icp.is_equal(result)) {
-    // erase
-    if (!icp.is_empty_flash(result)) {
-      icp.config_erase();
-      LOG_C('x');
-    }
-    // write
+  // erase
+  if (icp.need_erase(result)) {
+    icp.config_erase();
+    LOG_C('x');
+  }
+  // write
+  if (icp.need_write(result)) {
     icp.config_write(config);
     LOG_C('.');
-    // verify
-    if (!icp.is_equal(icp.config_compare(config)))
-      return false;
   }
-
-  return true;
+  // verify
+  return icp.config_verify(config);
 }
 
 bool update_ldrom(const uint8_t rom[] PROGMEM, size_t length)
 {
-  // loader size in KiB
-  const uint8_t ld_kb = (length / 1024) + !!(length % 1024);
-  if (ld_kb < 1 || ld_kb > 4)
+  // bootloader size in KB
+  const uint8_t boot_kb = (length / 1024) + !!(length % 1024);
+  if (boot_kb < 1 || boot_kb > 4)
     return false;
 
-  const uint16_t ldsize = ld_kb * 1024;
+  const uint16_t ldsize = boot_kb * 1024;
   const uint16_t psize = icp.psize();
   const uint8_t incomplete_page = length / psize;
   const uint8_t first_empty_page = incomplete_page + !!(length % psize);
@@ -129,30 +127,30 @@ bool update_ldrom(const uint8_t rom[] PROGMEM, size_t length)
       // incomplete non-empty page
       uint16_t leftover = length - offset;
       memcpy_P(data, &rom[offset], leftover);
-      memset(&data[leftover], 0xff, psize - leftover);
+      memset(&data[leftover], UINT8_MAX, psize - leftover);
     } else if (page == first_empty_page) {
       // empty page (reset data[] once)
-      memset(data, 0xff, psize);
+      memset(data, UINT8_MAX, psize);
     }
 
     uint16_t address = icp.size() - ldsize + offset;
     uint8_t result = icp.flash_compare(address, data, psize);
+    if (icp.equal(result))
+      continue; // nothing to do
 
-    if (!icp.is_equal(result)) {
-      // erase
-      if (!icp.is_empty_flash(result)) {
-        icp.flash_erase(address);
-        LOG_C('x');
-      }
-      // write
-      if (!icp.is_empty_buffer(result)) {
-        icp.flash_write(address, data, psize);
-        LOG_C('.');
-      }
-      // verify
-      if (!icp.is_equal(icp.flash_compare(address, data, psize)))
-        return false;
+    // erase
+    if (icp.need_erase(result)) {
+      icp.flash_erase(address);
+      LOG_C('x');
     }
+    // write
+    if (icp.need_write(result)) {
+      icp.flash_write(address, data, psize);
+      LOG_C('.');
+    }
+    // verify
+    if (!icp.flash_verify(address, data, psize))
+      return false;
   }
 
   return true;

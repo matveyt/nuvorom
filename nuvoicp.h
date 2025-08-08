@@ -3,11 +3,12 @@
 // Nuvoton In-Circuit Programming client
 class NuvotonICP {
   public:
-    static constexpr uint8_t NUVOTON = 0xda;    // company ID
-    static constexpr uint16_t N76E616 = 0x2f50; // device ID
-    static constexpr uint16_t NONE = -1;
-    static constexpr uint8_t COMPARE_EQUAL = 1, // compare() flags
-      COMPARE_EMPTY_FLASH = 2, COMPARE_EMPTY_BUFFER = 4;
+    static constexpr uint8_t NUVOTON = 0xda;        // company ID
+    static constexpr uint16_t N76E616 = 0x2f50;     // device ID
+    static constexpr uint8_t COMPARE_NOT_EQUAL = 1, // compare() flags
+      COMPARE_GREATER = 2, COMPARE_NON_EMPTY = 4,
+      COMPARE_NEED_ERASE = COMPARE_NOT_EQUAL | COMPARE_GREATER,
+      COMPARE_NEED_WRITE = COMPARE_NOT_EQUAL | COMPARE_NON_EMPTY;
   protected:
     static constexpr uint32_t MAGIC_RESET = 0x9e1cb6;
     static constexpr uint32_t MAGIC_ENTER = 0x5aa503, MAGIC_EXIT = 0x0f78f0;
@@ -18,29 +19,29 @@ class NuvotonICP {
     static constexpr uint16_t DELAY_READ1 = 1, DELAY_READ2 = 1;
 
   public:
-    NuvotonICP(uint8_t dataPin, uint8_t clockPin, uint8_t resetPin)
-      : m_dataPin(dataPin), m_clockPin(clockPin), m_resetPin(resetPin), m_id(NONE) {}
+    NuvotonICP(uint8_t dataPin, uint8_t clockPin, uint8_t resetPin) :
+      m_dataPin(dataPin), m_clockPin(clockPin), m_resetPin(resetPin), m_id(UINT16_MAX) {}
 
-    uint8_t enter();  // on success returns company ID
+    uint8_t enter();  // returns company ID
     void exit();
     bool locked();
 
-    static constexpr uint8_t config0(bool cbs) { return cbs ? 0xff : 0x7f; }
+    static constexpr uint8_t config0(bool cbs) { return cbs ? UINT8_MAX : INT8_MAX; }
     static constexpr uint8_t config1(uint16_t ldsize)
-    { return (0xff - (ldsize + 1023) / 1024); }
-    static constexpr bool cbs(uint8_t config0) { return !!(config0 & 0x80); }
+    { return (UINT8_MAX - (ldsize + 1023) / 1024); }
+    static constexpr bool cbs(uint8_t config0) { return (config0 > INT8_MAX); }
     static constexpr uint16_t ldsize(uint8_t config1)
     { return ((7 - (config1 & 7)) * 1024); }
     static constexpr uint16_t id2psize(uint16_t id)
     { return (id != N76E616) ? 128 : 256; }
     static constexpr uint32_t id2size(uint16_t id)
     { return (((uint8_t)id >> 4) <= 4) ? (4096L << ((uint8_t)id >> 4)) : (18 * 1024); }
-    static constexpr bool is_equal(uint8_t result)
-    { return !!(result & COMPARE_EQUAL); }
-    static constexpr bool is_empty_flash(uint8_t result)
-    { return !!(result & COMPARE_EMPTY_FLASH); }
-    static constexpr bool is_empty_buffer(uint8_t result)
-    { return !!(result & COMPARE_EMPTY_BUFFER); }
+    static constexpr bool equal(uint8_t result)
+    { return !(result & COMPARE_NOT_EQUAL); }
+    static constexpr bool need_erase(uint8_t result)
+    { return ((result & COMPARE_NEED_ERASE) == COMPARE_NEED_ERASE); }
+    static constexpr bool need_write(uint8_t result)
+    { return ((result & COMPARE_NEED_WRITE) == COMPARE_NEED_WRITE); }
 
     uint16_t device_id() const { return m_id; }
     uint16_t psize() const { return id2psize(device_id()); }
@@ -51,6 +52,8 @@ class NuvotonICP {
     void config_read(uint8_t buffer[5]) { read(0x30000L, buffer, 5); }
     void config_write(uint8_t buffer[5]) { write(0x30000L, buffer, 5); }
     uint8_t config_compare(uint8_t buffer[5]) { return compare(0x30000L, buffer, 5); }
+    bool config_verify(uint8_t buffer[5]) { return equal(config_compare(buffer)); }
+
     // FLASH
     void flash_erase(uint16_t address) { erase(0L + address); }
     void flash_read(uint16_t address, uint8_t buffer[], size_t bufsize)
@@ -65,6 +68,11 @@ class NuvotonICP {
     {
       return compare(0L + address, buffer, bufsize);
     }
+    bool flash_verify(uint16_t address, uint8_t buffer[], size_t bufsize)
+    {
+      return equal(flash_compare(address, buffer, bufsize));
+    }
+
     // MASS
     void mass_erase();
 
@@ -74,7 +82,8 @@ class NuvotonICP {
     void pin_init(uint8_t pin, uint8_t data=LOW)
     { digitalWrite(pin, data); pinMode(pin, OUTPUT); }
     uint8_t read8() { return shiftIn(m_dataPin, m_clockPin, MSBFIRST); }
-    void write8(uint8_t data=0xff) { shiftOut(m_dataPin, m_clockPin, MSBFIRST, data); }
+    void write8(uint8_t data=UINT8_MAX)
+    { shiftOut(m_dataPin, m_clockPin, MSBFIRST, data); }
     void write24(uint8_t code, uint32_t param) { write24(param << 6 | code); }
     void write24(uint32_t data);
 
