@@ -10,12 +10,12 @@ uint8_t NuvotonICP::enter()
   // toggle reset
   for (int i = 23; i >= 0; --i) {
     digitalWrite(m_resetPin, bitRead(MAGIC_RESET, i));
-    delay(DELAY_RESET1 / 1000);
+    delay(DELAY_RESET_1 / 1000);
   }
 
   // magic enter sequence
   write24(MAGIC_ENTER);
-  delay(DELAY_RESET2 / 1000);
+  delay(DELAY_RESET_2 / 1000);
 
   // read company id
   write24(0x0b, 0);
@@ -37,12 +37,12 @@ void NuvotonICP::exit()
   if (m_id != UINT16_MAX) {
     // toggle reset
     digitalWrite(m_resetPin, HIGH);
-    delay(DELAY_RESET1 / 1000);
+    delay(DELAY_RESET_1 / 1000);
     digitalWrite(m_resetPin, LOW);
-    delay(DELAY_RESET1 / 1000);
+    delay(DELAY_RESET_1 / 1000);
     // magic exit sequence
     write24(MAGIC_EXIT);
-    delay(DELAY_RESET2 / 1000);
+    delay(DELAY_RESET_2 / 1000);
   }
 
   // pin release
@@ -83,13 +83,13 @@ void NuvotonICP::tiktok(uint16_t us1, uint16_t us2)
 
 }
 
-// eight bits of data + one stop bit
+// read eight bits of data + one stop bit
 uint8_t NuvotonICP::read9(bool last)
 {
   pin_float(m_dataPin);
   uint8_t data = read8();
   pin_init(m_dataPin, last ? HIGH : LOW);
-  tiktok(DELAY_READ1, DELAY_READ2);
+  tiktok(DELAY_READ_1, DELAY_READ_2);
   return data;
 }
 
@@ -99,7 +99,7 @@ void NuvotonICP::mass_erase()
   write24(0x26, 0x03a5a5);
   write8();
   digitalWrite(m_dataPin, HIGH);
-  tiktok(DELAY_MASS1, DELAY_MASS2);
+  tiktok(DELAY_MASS_1, DELAY_MASS_2);
 }
 
 // erase single page
@@ -108,13 +108,13 @@ void NuvotonICP::erase(uint32_t address)
   write24(0x22, address);
   write8();
   digitalWrite(m_dataPin, HIGH);
-  tiktok((device_id() != N76E616) ? DELAY_PAGE1 : 40000, DELAY_PAGE2);
+  tiktok((device_id() != N76E616) ? DELAY_PAGE_1 : DELAY_PAGE_MAX, DELAY_PAGE_2);
 }
 
 // read flash
 void NuvotonICP::read(uint32_t address, uint8_t buffer[], size_t bufsize)
 {
-  if (bufsize <= 0)
+  if (bufsize <= 0 || buffer == nullptr)
     return;
 
   write24(0, address);
@@ -124,39 +124,39 @@ void NuvotonICP::read(uint32_t address, uint8_t buffer[], size_t bufsize)
 }
 
 // write flash
-void NuvotonICP::write(uint32_t address, uint8_t buffer[], size_t bufsize)
+void NuvotonICP::write(uint32_t address, const uint8_t buffer[], size_t bufsize)
 {
-  if (bufsize <= 0)
+  if (bufsize <= 0 || buffer == nullptr)
     return;
 
   write24(0x21, address);
   write8(buffer[0]);              // write 1st byte
   for (size_t i = 1; i < bufsize; ++i) {
     digitalWrite(m_dataPin, LOW); // data continuation
-    tiktok((device_id() != N76E616) ? DELAY_PROG1 : 40, DELAY_PROG2);
+    tiktok((device_id() != N76E616) ? DELAY_PROG_1 : DELAY_PROG_MAX, DELAY_PROG_2);
     write8(buffer[i]);            // write next byte
   }
   digitalWrite(m_dataPin, HIGH);  // end of data
-  tiktok((device_id() != N76E616) ? DELAY_PROG1 : 40, DELAY_PROG2);
+  tiktok((device_id() != N76E616) ? DELAY_PROG_1 : DELAY_PROG_MAX, DELAY_PROG_2);
 }
 
 // verify flash
-uint8_t NuvotonICP::compare(uint32_t address, uint8_t buffer[], size_t bufsize)
+uint8_t NuvotonICP::compare(uint32_t address, const uint8_t buffer[], size_t bufsize)
 {
-  uint8_t result = 0;
   if (bufsize <= 0)
-    return result;
+    return 0;
 
   write24(0, address);
+  uint8_t result = 0;
   for (size_t i = 0; i < bufsize; ++i) {
-    uint8_t bffr = (buffer != 0) ? buffer[i] : UINT8_MAX;
+    uint8_t bffr = (buffer != nullptr) ? buffer[i] : UINT8_MAX;
     uint8_t flsh = read9((i != bufsize - 1) ? false : true);
     if (bffr != flsh)
       result |= COMPARE_NOT_EQUAL;  // buffer not equal to flash (do something)
     if ((bffr | flsh) != flsh)
       result |= COMPARE_GREATER;    // buffer has more ones (must erase)
     if (bffr != UINT8_MAX)
-      result |= COMPARE_NON_EMPTY;  // buffer has data (must write)
+      result |= COMPARE_NOT_EMPTY;  // buffer has data (must write)
   }
 
   return result;
